@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Ball Roller</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0a0a0f;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: monospace;
+      color: #aaa;
+      user-select: none;
+      overflow: hidden;
+      touch-action: none;
+    }
+
+    h2 {
+      font-size: 0.75rem;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: #7850ff;
+      margin-bottom: 24px;
+    }
+
+    canvas {
+      border-radius: 50%;
+      background: radial-gradient(circle at 40% 35%, #16121f, #0a0a0f);
+      box-shadow: 0 0 60px rgba(100,60,255,0.15), 0 0 0 1px #1e1e2e;
+      touch-action: none;
+    }
+
+    p {
+      margin-top: 20px;
+      font-size: 0.7rem;
+      letter-spacing: 0.1em;
+      color: #444;
+    }
+  </style>
+</head>
+<body>
+
+<h2>Ball Roller</h2>
+<canvas id="c" width="320" height="320"></canvas>
+<p>drag anywhere to roll</p>
+
+<script>
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  const W = 320, H = 320;
+  const CX = W / 2, CY = H / 2;
+  const TRACK_R = 120;
+  const BALL_R = 16;
+
+  let angle = 0;         // current ball angle on track
+  let angularVel = 0;    // current spin speed
+  let dragging = false;
+  let lastTouchX = null;
+  let lastTouchTime = null;
+
+  // ---- Drawing ----
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+
+    // Track glow
+    ctx.save();
+    ctx.shadowColor = 'rgba(120,80,255,0.25)';
+    ctx.shadowBlur = 20;
+    ctx.beginPath();
+    ctx.arc(CX, CY, TRACK_R, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(120,80,255,0.2)';
+    ctx.lineWidth = 18;
+    ctx.stroke();
+    ctx.restore();
+
+    // Track dashes
+    ctx.beginPath();
+    ctx.arc(CX, CY, TRACK_R, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(180,160,255,0.15)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 8]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Center orange ball
+    const og = ctx.createRadialGradient(CX - 4, CY - 4, 2, CX, CY, 14);
+    og.addColorStop(0, '#ffe080');
+    og.addColorStop(1, '#ff6a00');
+    ctx.save();
+    ctx.shadowColor = 'rgba(255,140,0,0.7)';
+    ctx.shadowBlur = 18;
+    ctx.beginPath();
+    ctx.arc(CX, CY, 14, 0, Math.PI * 2);
+    ctx.fillStyle = og;
+    ctx.fill();
+    ctx.restore();
+
+    // Rolling purple ball
+    const bx = CX + TRACK_R * Math.cos(angle);
+    const by = CY + TRACK_R * Math.sin(angle);
+    const pg = ctx.createRadialGradient(bx - 5, by - 5, 2, bx, by, BALL_R);
+    pg.addColorStop(0, '#d8b4ff');
+    pg.addColorStop(1, '#5510cc');
+    ctx.save();
+    ctx.shadowColor = 'rgba(160,80,255,0.9)';
+    ctx.shadowBlur = 22;
+    ctx.beginPath();
+    ctx.arc(bx, by, BALL_R, 0, Math.PI * 2);
+    ctx.fillStyle = pg;
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // ---- Physics loop ----
+  const FRICTION = 0.97;   // how fast it slows down (1 = no friction)
+  const MAX_VEL = 0.12;    // max angular velocity (rad/frame)
+
+  function loop() {
+    if (!dragging) {
+      angularVel *= FRICTION;
+    }
+    angle += angularVel;
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  // ---- Touch/Mouse input ----
+  // Convert horizontal drag delta → angular velocity
+  function applyDrag(dx, dt) {
+    if (dt <= 0) return;
+    // px/ms → rad/frame (60fps assumed)
+    const vel = (dx / W) * Math.PI * 2 * (16 / dt);
+    angularVel = Math.max(-MAX_VEL, Math.min(MAX_VEL, vel));
+  }
+
+  // Touch
+  canvas.addEventListener('touchstart', e => {
+    e.preventDefault();
+    dragging = true;
+    lastTouchX = e.touches[0].clientX;
+    lastTouchTime = performance.now();
+  }, { passive: false });
+
+  canvas.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (!dragging) return;
+    const now = performance.now();
+    const dx = e.touches[0].clientX - lastTouchX;
+    const dt = now - lastTouchTime;
+    applyDrag(dx, dt);
+    lastTouchX = e.touches[0].clientX;
+    lastTouchTime = now;
+  }, { passive: false });
+
+  canvas.addEventListener('touchend', e => {
+    e.preventDefault();
+    dragging = false;
+  }, { passive: false });
+
+  // Mouse (for desktop testing)
+  canvas.addEventListener('mousedown', e => {
+    dragging = true;
+    lastTouchX = e.clientX;
+    lastTouchTime = performance.now();
+  });
+  window.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const now = performance.now();
+    const dx = e.clientX - lastTouchX;
+    const dt = now - lastTouchTime;
+    applyDrag(dx, dt);
+    lastTouchX = e.clientX;
+    lastTouchTime = now;
+  });
+  window.addEventListener('mouseup', () => { dragging = false; });
+
+  loop();
+</script>
+
+</body>
+</html>
